@@ -1,0 +1,550 @@
+openapi: 3.0.0
+
+info:
+  title: Task Board API
+  version: 1.0.0
+  description: Boards va Tasks boshqarish uchun REST API
+
+servers:
+  - url: http://localhost:4001
+
+tags:
+  - name: Boards
+    description: Board CRUD operatsiyalari
+  - name: Tasks
+    description: Task CRUD operatsiyalari
+
+components:
+  schemas:
+    Board:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        board_title:
+          type: string
+          maxLength: 50
+          example: "Ish loyihasi"
+        board_desc:
+          type: string
+          maxLength: 255
+          example: "Asosiy ish loyihasi uchun board"
+        board_created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        board_updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-16T08:00:00Z"
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+        task_board_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        task_title:
+          type: string
+          maxLength: 50
+          example: "Login sahifasini tayyor qilish"
+        task_desc:
+          type: string
+          maxLength: 255
+          example: "JWT bilan login va register endpointlarini yozish"
+        task_status:
+          type: string
+          enum: [Pending, In Progress, Partial, Completed]
+          default: Pending
+          example: "In Progress"
+        task_completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        task_created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        task_updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-16T08:00:00Z"
+
+    Error400:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "title and desc are required"
+
+    Error500:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Internal server error"
+
+    SuccessMessage:
+      type: object
+      properties:
+        message:
+          type: string
+
+paths:
+
+  # ─────────────────────────────────────────
+  # BOARDS
+  # ─────────────────────────────────────────
+
+  /get_all_boards:
+    get:
+      summary: Barcha boardlarni olish
+      tags: [Boards]
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Sahifa raqami
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Har sahifadagi elementlar soni
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Board nomi bo'yicha qidirish
+      responses:
+        "200":
+          description: Boardlar ro'yxati muvaffaqiyatli qaytarildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  boards:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Board"
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /get_one_board/{id}:
+    get:
+      summary: Bitta boardni ID bo'yicha olish
+      tags: [Boards]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Board ID
+      responses:
+        "200":
+          description: Board topildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  board:
+                    $ref: "#/components/schemas/Board"
+        "400":
+          description: ID yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /add_board:
+    post:
+      summary: Yangi board qo'shish
+      tags: [Boards]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, desc]
+              properties:
+                title:
+                  type: string
+                  maxLength: 50
+                  example: "Yangi loyiha"
+                desc:
+                  type: string
+                  maxLength: 255
+                  example: "Bu board yangi loyiha uchun"
+      responses:
+        "201":
+          description: Board muvaffaqiyatli qo'shildi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+              example:
+                message: "added board, successfully"
+        "400":
+          description: title yoki desc yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /update_board/{id}:
+    put:
+      summary: Boardni yangilash (kamida bitta maydon kerak)
+      tags: [Boards]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Board ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: "Yangilangan nom"
+                desc:
+                  type: string
+                  example: "Yangilangan tavsif"
+      responses:
+        "201":
+          description: Board muvaffaqiyatli yangilandi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+              example:
+                message: "updated board, successfully"
+        "400":
+          description: Hech qanday maydon yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /delete_board/{id}:
+    delete:
+      summary: Boardni o'chirish (bog'liq tasklar ham o'chadi)
+      tags: [Boards]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Board ID
+      responses:
+        "201":
+          description: Board muvaffaqiyatli o'chirildi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+              example:
+                message: "deleted board, successfully"
+        "400":
+          description: ID yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  # ─────────────────────────────────────────
+  # TASKS
+  # ─────────────────────────────────────────
+
+  /get_all_tasks/{id}:
+    get:
+      summary: Board ichidagi barcha tasklarni olish
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Board ID
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Sahifa raqami
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Har sahifadagi elementlar soni
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Task nomi bo'yicha qidirish
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [Pending, In Progress, Partial, Completed]
+          description: Status bo'yicha filter
+      responses:
+        "200":
+          description: Tasklar ro'yxati muvaffaqiyatli qaytarildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+        "400":
+          description: Board ID yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /get_one_task/{id}:
+    get:
+      summary: Bitta taskni ID bo'yicha olish
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Task ID
+      responses:
+        "200":
+          description: Task topildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    $ref: "#/components/schemas/Task"
+        "400":
+          description: ID yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /add_task/{id}:
+    post:
+      summary: Boardga yangi task qo'shish
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Board ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, desc]
+              properties:
+                title:
+                  type: string
+                  maxLength: 50
+                  example: "API yozish"
+                desc:
+                  type: string
+                  maxLength: 255
+                  example: "Express bilan REST API yozish"
+      responses:
+        "201":
+          description: Task muvaffaqiyatli qo'shildi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+              example:
+                message: "added task, successfully"
+        "400":
+          description: title, desc yoki board_id yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /update_task/{id}:
+    put:
+      summary: Taskni yangilash (kamida bitta maydon kerak)
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Task ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: "Yangilangan sarlavha"
+                desc:
+                  type: string
+                  example: "Yangilangan tavsif"
+                status:
+                  type: string
+                  enum: [Pending, In Progress, Partial, Completed]
+                  example: "Completed"
+      responses:
+        "201":
+          description: Task muvaffaqiyatli yangilandi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+              example:
+                message: "updated task, successfully"
+        "400":
+          description: Hech qanday maydon yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
+
+  /delete_task/{id}:
+    delete:
+      summary: Taskni o'chirish
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Task ID
+      responses:
+        "201":
+          description: Task muvaffaqiyatli o'chirildi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+              example:
+                message: "deleted task, successfully"
+        "400":
+          description: ID yuborilmagan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error400"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error500"
