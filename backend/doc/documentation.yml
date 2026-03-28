@@ -1,44 +1,69 @@
 openapi: 3.0.0
-
 info:
   title: Task Board API
+  description: Trello-like task board REST API
   version: 1.0.0
-  description: Boards va Tasks boshqarish uchun REST API
 
 servers:
-  - url: http://localhost:4001
+  - url: http://localhost:3000/api
+    description: Local server
 
-tags:
-  - name: Boards
-    description: Board CRUD operatsiyalari
-  - name: Tasks
-    description: Task CRUD operatsiyalari
-
+# ─────────────────────────────────────────
+# SECURITY
+# ─────────────────────────────────────────
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
-    Board:
+    User:
       type: object
       properties:
         id:
           type: string
           format: uuid
           example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        user_username:
+          type: string
+          example: "ahmadjon"
+        user_email:
+          type: string
+          example: "ahmadjon@gmail.com"
+        user_role:
+          type: string
+          enum: [user, admin]
+          example: "user"
+        user_created_at:
+          type: string
+          format: date-time
+
+    Board:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
         board_title:
           type: string
-          maxLength: 50
-          example: "Ish loyihasi"
+          example: "Loyiha 1"
         board_desc:
           type: string
-          maxLength: 255
-          example: "Asosiy ish loyihasi uchun board"
+          example: "Birinchi loyiha tavsifi"
+        board_created_by:
+          type: string
+          format: uuid
+        created_by_username:
+          type: string
+          example: "ahmadjon"
         board_created_at:
           type: string
           format: date-time
-          example: "2024-01-15T10:30:00Z"
         board_updated_at:
           type: string
           format: date-time
-          example: "2024-01-16T08:00:00Z"
 
     Task:
       type: object
@@ -46,89 +71,247 @@ components:
         id:
           type: string
           format: uuid
-          example: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
         task_board_id:
           type: string
           format: uuid
-          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        task_created_by:
+          type: string
+          format: uuid
+        task_assigned_to:
+          type: string
+          format: uuid
+          nullable: true
         task_title:
           type: string
-          maxLength: 50
-          example: "Login sahifasini tayyor qilish"
+          example: "Login sahifasini yasash"
         task_desc:
           type: string
-          maxLength: 255
-          example: "JWT bilan login va register endpointlarini yozish"
+          example: "JWT bilan autentifikatsiya"
+          nullable: true
         task_status:
           type: string
           enum: [Pending, In Progress, Partial, Completed]
-          default: Pending
-          example: "In Progress"
+          example: "Pending"
+        task_due_date:
+          type: string
+          format: date-time
+          nullable: true
         task_completed_at:
           type: string
           format: date-time
           nullable: true
-          example: null
         task_created_at:
           type: string
           format: date-time
-          example: "2024-01-15T10:30:00Z"
         task_updated_at:
           type: string
           format: date-time
-          example: "2024-01-16T08:00:00Z"
+        created_by_username:
+          type: string
+        assigned_to_username:
+          type: string
+          nullable: true
 
-    Error400:
+    Error:
       type: object
       properties:
         message:
           type: string
-          example: "title and desc are required"
+          example: "Xato yuz berdi"
 
-    Error500:
-      type: object
-      properties:
-        message:
-          type: string
-          example: "Internal server error"
-
-    SuccessMessage:
-      type: object
-      properties:
-        message:
-          type: string
-
+# ─────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────
 paths:
 
-  # ─────────────────────────────────────────
-  # BOARDS
-  # ─────────────────────────────────────────
+  # ───────────── AUTH ─────────────
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Ro'yxatdan o'tish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username:
+                  type: string
+                  example: "ahmadjon"
+                email:
+                  type: string
+                  example: "ahmadjon@gmail.com"
+                password:
+                  type: string
+                  example: "12345678"
+      responses:
+        "201":
+          description: Ro'yxatdan o'tildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Ro'yxatdan o'tildi"
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          description: Barcha maydonlar to'ldirilishi shart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Email yoki username band
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
-  /get_all_boards:
-    get:
-      summary: Barcha boardlarni olish
-      tags: [Boards]
-      parameters:
-        - in: query
-          name: page
-          schema:
-            type: integer
-            default: 1
-          description: Sahifa raqami
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            default: 10
-          description: Har sahifadagi elementlar soni
-        - in: query
-          name: search
-          schema:
-            type: string
-          description: Board nomi bo'yicha qidirish
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Tizimga kirish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  example: "ahmadjon@gmail.com"
+                password:
+                  type: string
+                  example: "12345678"
       responses:
         "200":
-          description: Boardlar ro'yxati muvaffaqiyatli qaytarildi
+          description: Tizimga kirildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Tizimga kirildi"
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          description: Email va parol kiritilishi shart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Parol noto'g'ri
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Foydalanuvchi topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Tizimdan chiqish
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Tizimdan chiqildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Tizimdan chiqildi"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/delete:
+    delete:
+      tags:
+        - Auth
+      summary: Akkauntni o'chirish (CASCADE — board va tasklar ham o'chadi)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Akkaunt o'chirildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Akkaunt o'chirildi"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ───────────── BOARDS ─────────────
+  /boards:
+    get:
+      tags:
+        - Boards
+      summary: Boardlar ro'yxati (user — o'zinikini, admin — hammasini ko'radi)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Boardlar ro'yxati
           content:
             application/json:
               schema:
@@ -138,31 +321,85 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Board"
-                  page:
-                    type: integer
-                    example: 1
-                  limit:
-                    type: integer
-                    example: 10
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           description: Server xatosi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error500"
+                $ref: "#/components/schemas/Error"
 
-  /get_one_board/{id}:
+    post:
+      tags:
+        - Boards
+      summary: Yangi board yaratish
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  example: "Yangi loyiha"
+                desc:
+                  type: string
+                  example: "Loyiha tavsifi"
+      responses:
+        "201":
+          description: Board yaratildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Board yaratildi"
+                  board:
+                    $ref: "#/components/schemas/Board"
+        "400":
+          description: Board nomi kiritilishi shart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /boards/{id}:
     get:
-      summary: Bitta boardni ID bo'yicha olish
-      tags: [Boards]
+      tags:
+        - Boards
+      summary: Bitta boardni olish
+      security:
+        - BearerAuth: []
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: string
             format: uuid
-          description: Board ID
       responses:
         "200":
           description: Board topildi
@@ -173,73 +410,44 @@ paths:
                 properties:
                   board:
                     $ref: "#/components/schemas/Board"
-        "400":
-          description: ID yuborilmagan
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error400"
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Board topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           description: Server xatosi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error500"
+                $ref: "#/components/schemas/Error"
 
-  /add_board:
-    post:
-      summary: Yangi board qo'shish
-      tags: [Boards]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [title, desc]
-              properties:
-                title:
-                  type: string
-                  maxLength: 50
-                  example: "Yangi loyiha"
-                desc:
-                  type: string
-                  maxLength: 255
-                  example: "Bu board yangi loyiha uchun"
-      responses:
-        "201":
-          description: Board muvaffaqiyatli qo'shildi
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessMessage"
-              example:
-                message: "added board, successfully"
-        "400":
-          description: title yoki desc yuborilmagan
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error400"
-        "500":
-          description: Server xatosi
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error500"
-
-  /update_board/{id}:
     put:
-      summary: Boardni yangilash (kamida bitta maydon kerak)
-      tags: [Boards]
+      tags:
+        - Boards
+      summary: Boardni yangilash (faqat yaratgan user yoki admin)
+      security:
+        - BearerAuth: []
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: string
             format: uuid
-          description: Board ID
       requestBody:
         required: true
         content:
@@ -254,143 +462,311 @@ paths:
                   type: string
                   example: "Yangilangan tavsif"
       responses:
-        "201":
-          description: Board muvaffaqiyatli yangilandi
+        "200":
+          description: Board yangilandi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessMessage"
-              example:
-                message: "updated board, successfully"
-        "400":
-          description: Hech qanday maydon yuborilmagan
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Board yangilandi"
+                  board:
+                    $ref: "#/components/schemas/Board"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error400"
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Board topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           description: Server xatosi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error500"
+                $ref: "#/components/schemas/Error"
 
-  /delete_board/{id}:
     delete:
-      summary: Boardni o'chirish (bog'liq tasklar ham o'chadi)
-      tags: [Boards]
+      tags:
+        - Boards
+      summary: Boardni o'chirish (faqat yaratgan user yoki admin)
+      security:
+        - BearerAuth: []
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: string
             format: uuid
-          description: Board ID
-      responses:
-        "201":
-          description: Board muvaffaqiyatli o'chirildi
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessMessage"
-              example:
-                message: "deleted board, successfully"
-        "400":
-          description: ID yuborilmagan
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error400"
-        "500":
-          description: Server xatosi
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error500"
-
-  # ─────────────────────────────────────────
-  # TASKS
-  # ─────────────────────────────────────────
-
-  /get_all_tasks/{id}:
-    get:
-      summary: Board ichidagi barcha tasklarni olish
-      tags: [Tasks]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Board ID
-        - in: query
-          name: page
-          schema:
-            type: integer
-            default: 1
-          description: Sahifa raqami
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            default: 10
-          description: Har sahifadagi elementlar soni
-        - in: query
-          name: search
-          schema:
-            type: string
-          description: Task nomi bo'yicha qidirish
-        - in: query
-          name: status
-          schema:
-            type: string
-            enum: [Pending, In Progress, Partial, Completed]
-          description: Status bo'yicha filter
       responses:
         "200":
-          description: Tasklar ro'yxati muvaffaqiyatli qaytarildi
+          description: Board o'chirildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Board o'chirildi"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Board topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /boards/{id}/members:
+    post:
+      tags:
+        - Boards
+      summary: Boardga member qo'shish (faqat yaratgan user yoki admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [memberId]
+              properties:
+                memberId:
+                  type: string
+                  format: uuid
+                  example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        "200":
+          description: Member qo'shildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Member qo'shildi"
+        "400":
+          description: memberId kiritilishi shart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Board yoki foydalanuvchi topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ───────────── TASKS ─────────────
+  /tasks:
+    get:
+      tags:
+        - Tasks
+      summary: Boarddagi tasklarni statusga qarab guruhlangan holda olish
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: board_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        "200":
+          description: Tasklarlar (Trello kolonka mantiqida)
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   tasks:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Task"
-                  page:
-                    type: integer
-                    example: 1
-                  limit:
-                    type: integer
-                    example: 10
+                    type: object
+                    properties:
+                      Pending:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Task"
+                      In Progress:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Task"
+                      Partial:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Task"
+                      Completed:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Task"
         "400":
-          description: Board ID yuborilmagan
+          description: board_id kiritilishi shart
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error400"
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Bu boardga ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           description: Server xatosi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error500"
+                $ref: "#/components/schemas/Error"
 
-  /get_one_task/{id}:
+    post:
+      tags:
+        - Tasks
+      summary: Yangi task yaratish
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [board_id, title]
+              properties:
+                board_id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                  example: "Login sahifasini yasash"
+                desc:
+                  type: string
+                  example: "JWT bilan autentifikatsiya"
+                assigned_to:
+                  type: string
+                  format: uuid
+                  nullable: true
+                due_date:
+                  type: string
+                  format: date-time
+                  nullable: true
+      responses:
+        "201":
+          description: Task yaratildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Task yaratildi"
+                  task:
+                    $ref: "#/components/schemas/Task"
+        "400":
+          description: board_id va title kiritilishi shart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Bu boardga ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /tasks/{id}:
     get:
-      summary: Bitta taskni ID bo'yicha olish
-      tags: [Tasks]
+      tags:
+        - Tasks
+      summary: Bitta taskni olish
+      security:
+        - BearerAuth: []
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: string
             format: uuid
-          description: Task ID
       responses:
         "200":
           description: Task topildi
@@ -401,81 +777,38 @@ paths:
                 properties:
                   task:
                     $ref: "#/components/schemas/Task"
-        "400":
-          description: ID yuborilmagan
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error400"
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Task topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           description: Server xatosi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error500"
+                $ref: "#/components/schemas/Error"
 
-  /add_task/{id}:
-    post:
-      summary: Boardga yangi task qo'shish
-      tags: [Tasks]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Board ID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [title, desc]
-              properties:
-                title:
-                  type: string
-                  maxLength: 50
-                  example: "API yozish"
-                desc:
-                  type: string
-                  maxLength: 255
-                  example: "Express bilan REST API yozish"
-      responses:
-        "201":
-          description: Task muvaffaqiyatli qo'shildi
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessMessage"
-              example:
-                message: "added task, successfully"
-        "400":
-          description: title, desc yoki board_id yuborilmagan
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error400"
-        "500":
-          description: Server xatosi
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error500"
-
-  /update_task/{id}:
     put:
-      summary: Taskni yangilash (kamida bitta maydon kerak)
-      tags: [Tasks]
+      tags:
+        - Tasks
+      summary: Taskni yangilash (faqat yaratgan user yoki admin)
+      security:
+        - BearerAuth: []
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: string
             format: uuid
-          description: Task ID
       requestBody:
         required: true
         content:
@@ -492,59 +825,255 @@ paths:
                 status:
                   type: string
                   enum: [Pending, In Progress, Partial, Completed]
-                  example: "Completed"
+                  example: "In Progress"
+                assigned_to:
+                  type: string
+                  format: uuid
+                  nullable: true
+                due_date:
+                  type: string
+                  format: date-time
+                  nullable: true
       responses:
-        "201":
-          description: Task muvaffaqiyatli yangilandi
+        "200":
+          description: Task yangilandi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessMessage"
-              example:
-                message: "updated task, successfully"
-        "400":
-          description: Hech qanday maydon yuborilmagan
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Task yangilandi"
+                  task:
+                    $ref: "#/components/schemas/Task"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error400"
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Task topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           description: Server xatosi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error500"
+                $ref: "#/components/schemas/Error"
 
-  /delete_task/{id}:
     delete:
-      summary: Taskni o'chirish
-      tags: [Tasks]
+      tags:
+        - Tasks
+      summary: Taskni o'chirish (faqat yaratgan user yoki admin)
+      security:
+        - BearerAuth: []
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: string
             format: uuid
-          description: Task ID
       responses:
-        "201":
-          description: Task muvaffaqiyatli o'chirildi
+        "200":
+          description: Task o'chirildi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessMessage"
-              example:
-                message: "deleted task, successfully"
-        "400":
-          description: ID yuborilmagan
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Task o'chirildi"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error400"
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Task topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           description: Server xatosi
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error500"
+                $ref: "#/components/schemas/Error"
+
+  # ───────────── ADMIN ─────────────
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Barcha foydalanuvchilarni olish (faqat admin)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Foydalanuvchilar ro'yxati
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q (faqat admin)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/users/{id}:
+    put:
+      tags:
+        - Admin
+      summary: Foydalanuvchini yangilash (faqat admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: "yangi_username"
+                email:
+                  type: string
+                  example: "yangi@gmail.com"
+                role:
+                  type: string
+                  enum: [user, admin]
+                  example: "admin"
+      responses:
+        "200":
+          description: Foydalanuvchi yangilandi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Foydalanuvchi yangilandi"
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q (faqat admin)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Foydalanuvchi topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - Admin
+      summary: Foydalanuvchini o'chirish (faqat admin, CASCADE — board va tasklar ham o'chadi)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Foydalanuvchi o'chirildi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Foydalanuvchi o'chirildi"
+        "401":
+          description: Token mavjud emas yoki yaroqsiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Ruxsat yo'q (faqat admin)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Foydalanuvchi topilmadi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server xatosi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

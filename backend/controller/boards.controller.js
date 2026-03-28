@@ -1,89 +1,206 @@
-const pool = require("../database/db")
+const pool = require("../database/db");
 
-// GET ONE /////////////////////////////////////////////////////////////////////////////////////////////////
-const getOneBoard = async (req, res) => {
+// GET /api/boards
+// User: o'zi yaratgan yoki a'zo bo'lgan boardlar
+// Admin: hamma boardlar
+const getBoards = async (req, res, next) => {
   try {
-    const {id} = req.params
+    const { id: userId, role } = req.user;
 
-    if(!id) return res.status(400).json({message: "board id is required"})
+    let result;
+    if (role === "admin") {
+      result = await pool.query(
+        `SELECT b.*, u.user_username AS created_by_username
+         FROM boards b
+         JOIN users u ON u.id = b.board_created_by
+         ORDER BY b.board_created_at DESC`
+      );
+    } else {
+      result = await pool.query(
+        `SELECT b.*, u.user_username AS created_by_username
+         FROM boards b
+         JOIN users u ON u.id = b.board_created_by
+         WHERE b.board_created_by = $1
+            OR EXISTS (
+              SELECT 1 FROM board_members bm
+              WHERE bm.bm_board_id = b.id AND bm.bm_user_id = $1
+            )
+         ORDER BY b.board_created_at DESC`,
+        [userId]
+      );
+    }
 
-    const board = await pool.query(`select * from boards where id = $1`, [id])
-
-    res.status(200).json({board})
-  } catch (error) {
-    res.status(500).json({message: error.message})
+    return res.status(200).json({ boards: result.rows });
+  } catch (err) {
+    next(err);
   }
-}
+};
 
-// GET ALL /////////////////////////////////////////////////////////////////////////////////////////////////
-const getAllBoards = async (req, res) => {
+// GET /api/boards/:id
+// User: faqat o'zi a'zo yoki yaratgan board
+// Admin: istalgan board
+const getBoardById = async (req, res, next) => {
   try {
-    let {page, limit, search} = req.query
-    page = parseInt(page) || 1
-    limit = parseInt(limit) || 10
-    offset = (page-1)*limit
-    search = search ?? '%'
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
 
-    const boards = await pool.query( `select * from boards WHERE board_title ILIKE $1 LIMIT $2 OFFSET $3`, [`%${search}%`, limit, offset])
+    let result;
+    if (role === "admin") {
+      result = await pool.query(
+        `SELECT b.*, u.user_username AS created_by_username
+         FROM boards b
+         JOIN users u ON u.id = b.board_created_by
+         WHERE b.id = $1`,
+        [id]
+      );
+    } else {
+      result = await pool.query(
+        `SELECT b.*, u.user_username AS created_by_username
+         FROM boards b
+         JOIN users u ON u.id = b.board_created_by
+         WHERE b.id = $1
+           AND (
+             b.board_created_by = $2
+             OR EXISTS (
+               SELECT 1 FROM board_members bm
+               WHERE bm.bm_board_id = b.id AND bm.bm_user_id = $2
+             )
+           )`,
+        [id, userId]
+      );
+    }
 
-    res.status(200).json({
-      boards: boards.rows,
-      page,
-      limit
-    })
-  } catch (error) {
-    res.status(500).json({message: error.message})
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Board topilmadi yoki ruxsat yo'q" });
+    }
+
+    return res.status(200).json({ board: result.rows[0] });
+  } catch (err) {
+    next(err);
   }
-}
+};
 
-// ADD ONE /////////////////////////////////////////////////////////////////////////////////////////////////
-const addBoard = async (req, res) => {
+// POST /api/boards
+const createBoard = async (req, res, next) => {
   try {
-    const {title, desc} = req.body
+    const { id: userId } = req.user;
+    const { title, desc } = req.body;
 
-    if(!title || !desc) return res.status(400).json({message: "title and desc are required"})
-    
-    await pool.query(`insert into boards(board_title, board_desc) values($1, $2)`, [title, desc])
+    if (!title) {
+      return res.status(400).json({ message: "Board nomi kiritilishi shart" });
+    }
 
-    res.status(201).json({message: "added board, successfully"})
-  } catch (error) {
-    res.status(500).json({message: error.message})
+    const result = await pool.query(
+      `INSERT INTO boards (board_title, board_desc, board_created_by)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [title, desc || null, userId]
+    );
+
+    // Yaratuvchini board_members ga avtomatik qo'shish
+    await pool.query(
+      `INSERT INTO board_members (bm_board_id, bm_user_id) VALUES ($1, $2)`,
+      [result.rows[0].id, userId]
+    );
+
+    return res.status(201).json({ message: "Board yaratildi", board: result.rows[0] });
+  } catch (err) {
+    next(err);
   }
-}
+};
 
-// UPDATE /////////////////////////////////////////////////////////////////////////////////////////////////
-const updateBoard = async (req, res) => {
+// PUT /api/boards/:id
+// Faqat yaratgan user yoki admin
+const updateBoard = async (req, res, next) => {
   try {
-    const board_id = req.params.id
-    const {title, desc} = req.body
-    if(!board_id || !(title || desc)) return res.status(400).json({message: "title or desc and board_ids are required"})
-    const { board_title: oldTitle, board_desc: oldDesc } =(await pool.query(`select board_title, board_desc from boards where id = $1`, [board_id])).rows[0]
-    await pool.query(`update boards set board_title=$1, board_desc=$2 where id=$3`,
-    [title ?? oldTitle, desc ?? oldDesc, board_id])
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
+    const { title, desc } = req.body;
 
-    res.status(201).json({message: "updated board, successfully"})
-  } catch (error) {
-    res.status(500).json({message: error.message})
+    const board = await pool.query("SELECT * FROM boards WHERE id = $1", [id]);
+    if (board.rows.length === 0) {
+      return res.status(404).json({ message: "Board topilmadi" });
+    }
+
+    if (board.rows[0].board_created_by !== userId && role !== "admin") {
+      return res.status(403).json({ message: "Ruxsat yo'q" });
+    }
+
+    const result = await pool.query(
+      `UPDATE boards
+       SET board_title = COALESCE($1, board_title),
+           board_desc  = COALESCE($2, board_desc)
+       WHERE id = $3
+       RETURNING *`,
+      [title || null, desc || null, id]
+    );
+
+    return res.status(200).json({ message: "Board yangilandi", board: result.rows[0] });
+  } catch (err) {
+    next(err);
   }
-}
+};
 
-// DELETE /////////////////////////////////////////////////////////////////////////////////////////////////
-const deleteBoard = async (req, res) => {
+// DELETE /api/boards/:id
+// Faqat yaratgan user yoki admin
+const deleteBoard = async (req, res, next) => {
   try {
-    const board_id = req.params.id
-    if(!board_id) return res.status(400).json({message: "board_id is required"})
-    await pool.query(`delete from boards where id = $1`, [board_id])
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
 
-    res.status(201).json({message: "deleted board, successfully"})
-  } catch (error) {
-    res.status(500).json({message: error.message})
+    const board = await pool.query("SELECT * FROM boards WHERE id = $1", [id]);
+    if (board.rows.length === 0) {
+      return res.status(404).json({ message: "Board topilmadi" });
+    }
+
+    if (board.rows[0].board_created_by !== userId && role !== "admin") {
+      return res.status(403).json({ message: "Ruxsat yo'q" });
+    }
+
+    await pool.query("DELETE FROM boards WHERE id = $1", [id]);
+    return res.status(200).json({ message: "Board o'chirildi" });
+  } catch (err) {
+    next(err);
   }
-}
+};
 
-module.exports = {
-  getOneBoard,
-  getAllBoards,
-  addBoard,
-  updateBoard,
-  deleteBoard
-}
+// POST /api/boards/:id/members
+// Faqat yaratgan user yoki admin member qo'sha oladi
+const addMember = async (req, res, next) => {
+  try {
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
+    const { memberId } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({ message: "memberId kiritilishi shart" });
+    }
+
+    const board = await pool.query("SELECT * FROM boards WHERE id = $1", [id]);
+    if (board.rows.length === 0) {
+      return res.status(404).json({ message: "Board topilmadi" });
+    }
+
+    if (board.rows[0].board_created_by !== userId && role !== "admin") {
+      return res.status(403).json({ message: "Ruxsat yo'q" });
+    }
+
+    const member = await pool.query("SELECT id FROM users WHERE id = $1", [memberId]);
+    if (member.rows.length === 0) {
+      return res.status(404).json({ message: "Foydalanuvchi topilmadi" });
+    }
+
+    await pool.query(
+      `INSERT INTO board_members (bm_board_id, bm_user_id)
+       VALUES ($1, $2)
+       ON CONFLICT (bm_board_id, bm_user_id) DO NOTHING`,
+      [id, memberId]
+    );
+
+    return res.status(200).json({ message: "Member qo'shildi" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getBoards, getBoardById, createBoard, updateBoard, deleteBoard, addMember };

@@ -1,12 +1,17 @@
-const {Router} = require("express")
-const { getAllTasks, getOneTask, addTask, updateTask, deleteTask } = require("../controller/tasks.controller")
+const router = require("express").Router();
+const authentication = require("../middleware/authentication");
+const {
+  getTasksByBoard,
+  getTaskById,
+  createTask,
+  updateTask,
+  deleteTask,
+} = require("../controller/tasks.controller");
 
-const taskRouter = Router()
+router.get("/",       authentication, getTasksByBoard);  // ?board_id=xxx
+router.get("/:id",    authentication, getTaskById);
+router.post("/",      authentication, createTask);
+router.put("/:id",    authentication, updateTask);
+router.delete("/:id", authentication, deleteTask);
 
-taskRouter.get("/get_all_tasks/:id", getAllTasks)
-taskRouter.get("/get_one_task/:id", getOneTask)
-taskRouter.post("/add_task/:id", addTask)
-taskRouter.put("/update_task/:id", updateTask)
-taskRouter.delete("/delete_task/:id", deleteTask)
-
-module.exports = taskRouter
+module.exports = router;

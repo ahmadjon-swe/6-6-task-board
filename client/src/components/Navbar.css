@@ -1,0 +1,64 @@
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  height: 58px;
+  background: #080810cc;
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+
+.navbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.navbar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--neon-purple);
+  box-shadow: 0 0 10px var(--neon-purple);
+  animation: pulse-neon 2s infinite;
+}
+.navbar__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.navbar__right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.navbar__admin-badge {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  background: #22d3ee15;
+  border: 1px solid #22d3ee30;
+  padding: 3px 10px;
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+.navbar__admin-badge:hover { background: #22d3ee25; }
+
+.navbar__user {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.navbar__logout {
+  padding: 7px 16px;
+  font-size: 12px;
+}

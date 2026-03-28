@@ -1,12 +1,19 @@
-const {Router} = require("express")
-const { getAllBoards, getOneBoard, addBoard, updateBoard, deleteBoard } = require("../controller/boards.controller")
+const router = require("express").Router();
+const authentication = require("../middleware/authentication");
+const {
+  getBoards,
+  getBoardById,
+  createBoard,
+  updateBoard,
+  deleteBoard,
+  addMember,
+} = require("../controller/boards.controller");
 
-const boardRouter = Router()
+router.get("/",              authentication, getBoards);
+router.get("/:id",           authentication, getBoardById);
+router.post("/",             authentication, createBoard);
+router.put("/:id",           authentication, updateBoard);
+router.delete("/:id",        authentication, deleteBoard);
+router.post("/:id/members",  authentication, addMember);
 
-boardRouter.get("/get_all_boards/", getAllBoards)
-boardRouter.get("/get_one_board/:id", getOneBoard)
-boardRouter.post("/add_board/", addBoard)
-boardRouter.put("/update_board/:id", updateBoard)
-boardRouter.delete("/delete_board/:id", deleteBoard)
-
-module.exports = boardRouter
+module.exports = router;
